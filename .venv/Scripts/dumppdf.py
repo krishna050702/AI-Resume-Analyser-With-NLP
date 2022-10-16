@@ -275,4 +275,199 @@ def dumppdf(
                         obj = stream_value(obj)
                         dumpxml(outfp, obj, codec=codec)
                 else:
-                    dumpxml(outfp, page.
+                    dumpxml(outfp, page.attrs)
+    if dumpall:
+        dumpallobjs(outfp, doc, codec, show_fallback_xref)
+    if (not objids) and (not pagenos) and (not dumpall):
+        dumptrailers(outfp, doc, show_fallback_xref)
+    fp.close()
+    if codec not in ("raw", "binary"):
+        outfp.write("\n")
+    return
+
+
+def create_parser() -> ArgumentParser:
+    parser = ArgumentParser(description=__doc__, add_help=True)
+    parser.add_argument(
+        "files",
+        type=str,
+        default=None,
+        nargs="+",
+        help="One or more paths to PDF files.",
+    )
+
+    parser.add_argument(
+        "--version",
+        "-v",
+        action="version",
+        version="pdfminer.six v{}".format(pdfminer.__version__),
+    )
+    parser.add_argument(
+        "--debug",
+        "-d",
+        default=False,
+        action="store_true",
+        help="Use debug logging level.",
+    )
+    procedure_parser = parser.add_mutually_exclusive_group()
+    procedure_parser.add_argument(
+        "--extract-toc",
+        "-T",
+        default=False,
+        action="store_true",
+        help="Extract structure of outline",
+    )
+    procedure_parser.add_argument(
+        "--extract-embedded", "-E", type=str, help="Extract embedded files"
+    )
+
+    parse_params = parser.add_argument_group(
+        "Parser", description="Used during PDF parsing"
+    )
+    parse_params.add_argument(
+        "--page-numbers",
+        type=int,
+        default=None,
+        nargs="+",
+        help="A space-seperated list of page numbers to parse.",
+    )
+    parse_params.add_argument(
+        "--pagenos",
+        "-p",
+        type=str,
+        help="A comma-separated list of page numbers to parse. Included for "
+        "legacy applications, use --page-numbers for more idiomatic "
+        "argument entry.",
+    )
+    parse_params.add_argument(
+        "--objects",
+        "-i",
+        type=str,
+        help="Comma separated list of object numbers to extract",
+    )
+    parse_params.add_argument(
+        "--all",
+        "-a",
+        default=False,
+        action="store_true",
+        help="If the structure of all objects should be extracted",
+    )
+    parse_params.add_argument(
+        "--show-fallback-xref",
+        action="store_true",
+        help="Additionally show the fallback xref. Use this if the PDF "
+        "has zero or only invalid xref's. This setting is ignored if "
+        "--extract-toc or --extract-embedded is used.",
+    )
+    parse_params.add_argument(
+        "--password",
+        "-P",
+        type=str,
+        default="",
+        help="The password to use for decrypting PDF file.",
+    )
+
+    output_params = parser.add_argument_group(
+        "Output", description="Used during output generation."
+    )
+    output_params.add_argument(
+        "--outfile",
+        "-o",
+        type=str,
+        default="-",
+        help='Path to file where output is written. Or "-" (default) to '
+        "write to stdout.",
+    )
+    codec_parser = output_params.add_mutually_exclusive_group()
+    codec_parser.add_argument(
+        "--raw-stream",
+        "-r",
+        default=False,
+        action="store_true",
+        help="Write stream objects without encoding",
+    )
+    codec_parser.add_argument(
+        "--binary-stream",
+        "-b",
+        default=False,
+        action="store_true",
+        help="Write stream objects with binary encoding",
+    )
+    codec_parser.add_argument(
+        "--text-stream",
+        "-t",
+        default=False,
+        action="store_true",
+        help="Write stream objects as plain text",
+    )
+
+    return parser
+
+
+def main(argv: Optional[List[str]] = None) -> None:
+    parser = create_parser()
+    args = parser.parse_args(args=argv)
+
+    if args.debug:
+        logging.getLogger().setLevel(logging.DEBUG)
+
+    if args.outfile == "-":
+        outfp = sys.stdout
+    else:
+        outfp = open(args.outfile, "w")
+
+    if args.objects:
+        objids = [int(x) for x in args.objects.split(",")]
+    else:
+        objids = []
+
+    if args.page_numbers:
+        pagenos = {x - 1 for x in args.page_numbers}
+    elif args.pagenos:
+        pagenos = {int(x) - 1 for x in args.pagenos.split(",")}
+    else:
+        pagenos = set()
+
+    password = args.password
+
+    if args.raw_stream:
+        codec: Optional[str] = "raw"
+    elif args.binary_stream:
+        codec = "binary"
+    elif args.text_stream:
+        codec = "text"
+    else:
+        codec = None
+
+    for fname in args.files:
+        if args.extract_toc:
+            dumpoutline(
+                outfp,
+                fname,
+                objids,
+                pagenos,
+                password=password,
+                dumpall=args.all,
+                codec=codec,
+                extractdir=None,
+            )
+        elif args.extract_embedded:
+            extractembedded(fname, password=password, extractdir=args.extract_embedded)
+        else:
+            dumppdf(
+                outfp,
+                fname,
+                objids,
+                pagenos,
+                password=password,
+                dumpall=args.all,
+                codec=codec,
+                extractdir=None,
+                show_fallback_xref=args.show_fallback_xref,
+            )
+
+    outfp.close()
+
+
+if __name__ == "__main__":
+    main()

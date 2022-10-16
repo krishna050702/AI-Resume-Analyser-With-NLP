@@ -196,4 +196,118 @@ def parse_args(args: Optional[List[str]]) -> argparse.Namespace:
         default=la_params.boxes_flow,
         help="Specifies how much a horizontal and vertical position of a "
         "text matters when determining the order of lines. The value "
-        "should
+        "should be within the range of -1.0 (only horizontal position "
+        "matters) to +1.0 (only vertical position matters). You can also "
+        "pass `disabled` to disable advanced layout analysis, and "
+        "instead return text based on the position of the bottom left "
+        "corner of the text box.",
+    )
+    la_param_group.add_argument(
+        "--all-texts",
+        "-A",
+        default=la_params.all_texts,
+        action="store_true",
+        help="If layout analysis should be performed on text in figures.",
+    )
+
+    output_params = parser.add_argument_group(
+        "Output", description="Used during output generation."
+    )
+    output_params.add_argument(
+        "--outfile",
+        "-o",
+        type=str,
+        default="-",
+        help="Path to file where output is written. "
+        'Or "-" (default) to write to stdout.',
+    )
+    output_params.add_argument(
+        "--output_type",
+        "-t",
+        type=str,
+        default="text",
+        help="Type of output to generate {text,html,xml,tag}.",
+    )
+    output_params.add_argument(
+        "--codec",
+        "-c",
+        type=str,
+        default="utf-8",
+        help="Text encoding to use in output file.",
+    )
+    output_params.add_argument(
+        "--output-dir",
+        "-O",
+        default=None,
+        help="The output directory to put extracted images in. If not given, "
+        "images are not extracted.",
+    )
+    output_params.add_argument(
+        "--layoutmode",
+        "-Y",
+        default="normal",
+        type=str,
+        help="Type of layout to use when generating html "
+        "{normal,exact,loose}. If normal,each line is"
+        " positioned separately in the html. If exact"
+        ", each character is positioned separately in"
+        " the html. If loose, same result as normal "
+        "but with an additional newline after each "
+        "text line. Only used when output_type is html.",
+    )
+    output_params.add_argument(
+        "--scale",
+        "-s",
+        type=float,
+        default=1.0,
+        help="The amount of zoom to use when generating html file. "
+        "Only used when output_type is html.",
+    )
+    output_params.add_argument(
+        "--strip-control",
+        "-S",
+        default=False,
+        action="store_true",
+        help="Remove control statement from text. "
+        "Only used when output_type is xml.",
+    )
+
+    parsed_args = parser.parse_args(args=args)
+
+    # Propagate parsed layout parameters to LAParams object
+    if parsed_args.no_laparams:
+        parsed_args.laparams = None
+    else:
+        parsed_args.laparams = LAParams(
+            line_overlap=parsed_args.line_overlap,
+            char_margin=parsed_args.char_margin,
+            line_margin=parsed_args.line_margin,
+            word_margin=parsed_args.word_margin,
+            boxes_flow=parsed_args.boxes_flow,
+            detect_vertical=parsed_args.detect_vertical,
+            all_texts=parsed_args.all_texts,
+        )
+
+    if parsed_args.page_numbers:
+        parsed_args.page_numbers = {x - 1 for x in parsed_args.page_numbers}
+
+    if parsed_args.pagenos:
+        parsed_args.page_numbers = {int(x) - 1 for x in parsed_args.pagenos.split(",")}
+
+    if parsed_args.output_type == "text" and parsed_args.outfile != "-":
+        for override, alttype in OUTPUT_TYPES:
+            if parsed_args.outfile.endswith(override):
+                parsed_args.output_type = alttype
+
+    return parsed_args
+
+
+def main(args: Optional[List[str]] = None) -> int:
+    parsed_args = parse_args(args)
+    outfp = extract_text(**vars(parsed_args))
+    outfp.close()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
